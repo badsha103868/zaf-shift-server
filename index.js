@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 require("dotenv").config();
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 3000;
 
 // middleware
@@ -41,17 +41,29 @@ async function run() {
         if(email){
           query.senderEmail = email;
         }
-         
+        //  sort ar jonnor options
+        const options = {sort: {createdAt: -1}}
 
-        const cursor = parcelsCOllection.find(query);
+        const cursor = parcelsCOllection.find(query, options);
         const result = await cursor.toArray();
         res.send(result)
     })
     // post api
     app.post('/parcels', async(req, res)=>{
       const parcel = req.body;
+      // time created with post 
+      parcel.createdAt = new Date();
+
       const result = await parcelsCOllection.insertOne(parcel)
       res.send(result) 
+    })
+
+    // delete
+    app.delete('/parcels/:id', async(req,res)=>{
+        const id = req.params.id
+        const query = {_id : new ObjectId(id)}
+        const result = await parcelsCOllection.deleteOne(query)
+        res.send(result)
     })
 
     // Send a ping to confirm a successful connection
