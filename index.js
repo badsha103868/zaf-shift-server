@@ -82,26 +82,32 @@ async function run() {
     app.post("/create-checkout-session", async (req, res) => {
       // client theka data info naoua
       const paymentInfo = req.body;
-
+      // amount set
+      const amount = parseInt(paymentInfo.cost) * 100;
 
       const session = await stripe.checkout.sessions.create({
         line_items: [
           {
-            // Provide the exact Price ID (for example, price_1234) of the product you want to sell
-            price_data:{
-              currency: 'USD',
-              unit_amount: 1500,
+            price_data: {
+              currency: "USD",
+              unit_amount: amount,
               product_data: {
-                name: paymentInfo.parcelName
-              }
+                name: paymentInfo.parcelName,
+              },
             },
             quantity: 1,
           },
         ],
         customer_email: paymentInfo.senderEmail,
         mode: "payment",
+        metadata: {
+          parcelId: paymentInfo.parcelId,
+        },
         success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success`,
+        cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
       });
+      console.log(session);
+      res.send({ url: session.url });
     });
 
     // Send a ping to confirm a successful connection
