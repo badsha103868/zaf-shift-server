@@ -4,16 +4,16 @@ const app = express();
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 3000;
- 
+
 // generate tracking id
 const crypto = require("crypto");
 
 function generateTrackingId() {
-    const prefix = "PRCL"; // your brand prefix
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD
-    const random = crypto.randomBytes(3).toString("hex").toUpperCase(); // 6-char random hex
+  const prefix = "PRCL"; // your brand prefix
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD
+  const random = crypto.randomBytes(3).toString("hex").toUpperCase(); // 6-char random hex
 
-    return `${prefix}-${date}-${random}`;
+  return `${prefix}-${date}-${random}`;
 }
 
 // stripe connection string
@@ -41,7 +41,8 @@ async function run() {
     await client.connect();
 
     const db = client.db("zap_shift_db");
-    const parcelsCOllection = db.collection("parcels");
+    const parcelsCollection = db.collection("parcels");
+    const paymentCollection = db.collection("payments");
 
     // parcel api
     app.get("/parcels", async (req, res) => {
@@ -58,7 +59,7 @@ async function run() {
       //  sort ar jonnor options
       const options = { sort: { createdAt: -1 } };
 
-      const cursor = parcelsCOllection.find(query, options);
+      const cursor = parcelsCollection.find(query, options);
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -67,7 +68,7 @@ async function run() {
     app.get("/parcels/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
-      const result = await parcelsCOllection.findOne(query);
+      const result = await parcelsCollection.findOne(query);
       res.send(result);
     });
 
@@ -77,15 +78,17 @@ async function run() {
       // time created with post
       parcel.createdAt = new Date();
 
-      const result = await parcelsCOllection.insertOne(parcel);
+      const result = await parcelsCollection.insertOne(parcel);
       res.send(result);
     });
 
     // delete
     app.delete("/parcels/:id", async (req, res) => {
       const id = req.params.id;
+
       const query = { _id: new ObjectId(id) };
-      const result = await parcelsCOllection.deleteOne(query);
+
+      const result = await parcelsCollection.deleteOne(query);
       res.send(result);
     });
 
@@ -103,7 +106,7 @@ async function run() {
               currency: "USD",
               unit_amount: amount,
               product_data: {
-                name: paymentInfo.parcelName,
+                name: `Please pay for: ${paymentInfo.parcelName}`,
               },
             },
             quantity: 1,
@@ -113,7 +116,7 @@ async function run() {
         mode: "payment",
         metadata: {
           parcelId: paymentInfo.parcelId,
-          parcelName: paymentInfo.parcelName
+          parcelName: paymentInfo.parcelName,
         },
         success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
@@ -123,70 +126,76 @@ async function run() {
     });
 
     //  payment status update api
-    app.patch('/payment-success', async(req, res)=>{
+    app.patch("/payment-success", async (req, res) => {
       // search url theke session_id ashtese tai query use korsi
 
       const sessionId = req.query.session_id;
       // console.log('session id', sessionId)
-      const session = await stripe.checkout.sessions.retrieve(sessionId)
-         
-      console.log('session retrieve', session)
-        // tracking id  call
-       const trackingId = generateTrackingId()
 
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-    //  jodi  payment status paid hoi
-      if(session.payment_status === 'paid'){
-        // id khujte 
-        const id = session.metadata.parcelId;
-        // id match korte
-        const query = {_id : new ObjectId(id)}
-        //  akhon update korbo
-        const update = {
-          $set:{
-            paymentStatus : "paid",
-             trackingId: trackingId
-          }
-        }
+      console.log("session retrieve", session);
 
-        //  akhon result kora update korbo
-        const result = await parcelsCOllection.updateOne(query , update)
+      const alreadyPaid = await paymentCollection.findOne({
+        transactionId: session.payment_intent,
+      });
 
-    //  payment hour sata sata data mongo db 
-
-    const payment = {
-      amount : session.amount_total / 100,
-      currency: session.currency,
-      customerEmail: session.customer_email,
-      parcelId: session.metadata.parcelId,
-      parcelName: session.metadata.parcelName,
-      transactionId : session.payment_intent,
-      paymentStatus: session.payment_status,
-      paidAt : new Data(),
-      
-
-    }
-    if(session.payment_status === "paid"){
-      const resultPayment = await paymentCollection.insertOne(payment)
-      
-      res.send({success: true, modifyParcel: result, paymentInfo: resultPayment})
-    }
-
-
-
-
-
-        
-
+      if (alreadyPaid) {
+        return res.send({
+          success: false,
+          message: "Payment already processed",
+        });
       }
 
+      // tracking id  call
+      const trackingId = generateTrackingId();
 
+      //  jodi  payment status paid hoi
+      if (session.payment_status === "paid") {
+        // id khujte
+        const id = session.metadata.parcelId;
+        // id match korte
+        const query = { _id: new ObjectId(id) };
+        //  akhon update korbo
+        const update = {
+          $set: {
+            paymentStatus: "paid",
+            trackingId: trackingId,
+          },
+        };
 
+        //  akhon result kora update korbo
+        const result = await parcelsCollection.updateOne(query, update);
 
-      res.send({success : false})
+        //  payment hour sata sata data mongo db
 
+        const payment = {
+          amount: session.amount_total / 100,
+          currency: session.currency,
+          customerEmail: session.customer_email,
+          parcelId: session.metadata.parcelId,
+          parcelName: session.metadata.parcelName,
+          transactionId: session.payment_intent,
+          paymentStatus: session.payment_status,
+          paidAt: new Date(),
+        };
 
-    })
+        if (session.payment_status === "paid") {
+          const resultPayment = await paymentCollection.insertOne(payment);
+
+           res.send({
+            success: true,
+            message: "Payment processed successfully",
+            modifyParcel: result,
+            trackingId: trackingId,
+             transactionId: session.payment_intent,
+            paymentInfo: resultPayment,
+          });
+        }
+      }
+
+      res.send({ success: false });
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
@@ -207,6 +216,3 @@ app.get("/", (req, res) => {
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
 });
-
-
-
