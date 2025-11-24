@@ -75,7 +75,28 @@ async function run() {
 
     const db = client.db("zap_shift_db");
     const parcelsCollection = db.collection("parcels");
+    const usersCollection = db.collection("users");
     const paymentCollection = db.collection("payments");
+    const ridersCollection = db.collection("riders");
+
+    //  users related apis
+     app.post('/users', async(req, res)=>{
+      const user = req.body;
+      // by default role hishabe rider k o akjon user hishabe rakbo 
+      user.role = 'user';
+      user.createdAt = new Date();
+       
+      const email = user.email;
+      const userExists = await usersCollection.findOne({ email })
+      
+      if(userExists){
+        return res.send({ message : 'user exists'})
+      }
+
+
+      const result = await usersCollection.insertOne(user)
+      res.send(result)
+     })
 
     // parcel api
     app.get("/parcels", async (req, res) => {
@@ -254,10 +275,39 @@ async function run() {
       return res.status(403).send({message: 'forbidden access'})
     }
 
-      const cursor = paymentCollection.find();
+      const cursor = paymentCollection.find().sort({paidAt: -1});
       const result = await cursor.toArray();
       res.send(result);
     });
+     
+    //  riders related api
+
+  // rider get
+  app.get('/riders', async(req, res)=>{
+    // only j gulo  pending oi data gulo pete 
+    const query ={}
+     if(req.query.status){
+      query.status = req.query.status
+     }
+
+     
+      const cursor = ridersCollection.find(query)
+      const result= await cursor.toArray()
+      res.send((result))
+  })
+
+  // rider post
+    app.post('/riders', async (req, res)=>{
+      const rider = req.body;
+      
+
+      rider.createdAt = new Date()
+      rider.status= "pending"
+      const result = await ridersCollection.insertOne(rider)
+      res.send(result)
+    })
+
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
