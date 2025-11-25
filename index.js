@@ -307,6 +307,36 @@ async function run() {
       res.send(result)
     })
 
+    //  rider patch
+    app.patch('/riders/:id', verifyFBToken, async(req, res)=>{
+      const id = req.params.id
+      const query = {_id : new ObjectId(id)}
+     const status = req.body.status;
+     const updatedDoc ={
+      $set:{
+        status : status
+      }
+     }
+     const result = await ridersCollection.updateOne(query,updatedDoc)
+      
+    //  user role ar jonnno check
+    if(status ==='approved'){
+      const email = req.body.email
+      const userQuery = {email}
+      // email pauor por update korbo
+      const updateUser = {
+        $set: {
+          role: 'rider'
+        }
+      }
+
+      const userResult = await usersCollection.updateOne(userQuery, updateUser)
+    }
+
+
+
+     res.send(result)
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
