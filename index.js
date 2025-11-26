@@ -45,8 +45,10 @@ const verifyFBToken = async (req, res, next) => {
 
   try {
     const idToken = token.split(" ")[1];
+
     const decoded = await admin.auth().verifyIdToken(idToken);
-    console.log("decoded in the token", decoded);
+
+    // console.log("decoded in the token", decoded);
     req.decoded_email = decoded.email;
 
     next();
@@ -79,7 +81,43 @@ async function run() {
     const paymentCollection = db.collection("payments");
     const ridersCollection = db.collection("riders");
 
+    // middleware admin before allowing admin activity
+    // must be used after verifyFBToken
+
+    const verifyAdmin = async(req,res,next)=>{
+      // verifyFBToken theka decoded email theke email passi
+      const email = req.decoded_email;
+      const query = { email }
+      // user paoua
+      const user = await usersCollection.findOne(query)
+       
+      //  admin na hoi tahole take forbidden access dakao
+      if(!user || user.role !== 'admin'){
+        return res.status(403).send({message: 'forbidden access'})
+      }
+   
+      next()
+    }
+
+    
+
     //  users related apis
+   
+    app.get('/users',verifyFBToken, async(req, res)=>{
+      const cursor = usersCollection.find()
+      const result = await cursor.toArray()
+      res.send(result)
+    })
+
+    // user ar role onujayi get
+    app.get('/users/:email/role', async(req, res)=>{
+      const email = req.params.email;
+      const query = { email }
+      const user = await usersCollection.findOne(query)
+      res.send({ role: user?.role || 'user'})
+    })
+
+
      app.post('/users', async(req, res)=>{
       const user = req.body;
       // by default role hishabe rider k o akjon user hishabe rakbo 
@@ -97,6 +135,21 @@ async function run() {
       const result = await usersCollection.insertOne(user)
       res.send(result)
      })
+
+     app.patch('/users/:id/role',verifyFBToken, verifyAdmin,async (req, res)=>{
+        const id = req.params.id;
+        // client a j role info disi oi ta received korbo
+        const roleInfo = req.body
+        const query = {_id : new ObjectId(id)}
+        const updateUser ={
+          $set:{
+            role: roleInfo.role
+          }
+        }
+        const result = await usersCollection.updateOne(query,updateUser)
+
+        res.send(result)
+     } )
 
     // parcel api
     app.get("/parcels", async (req, res) => {
@@ -302,16 +355,23 @@ async function run() {
       
 
       rider.createdAt = new Date()
+
       rider.status= "pending"
+
       const result = await ridersCollection.insertOne(rider)
+
       res.send(result)
     })
 
     //  rider patch
-    app.patch('/riders/:id', verifyFBToken, async(req, res)=>{
+
+    app.patch('/riders/:id', verifyFBToken,verifyAdmin, async(req, res)=>{
       const id = req.params.id
+
       const query = {_id : new ObjectId(id)}
+
      const status = req.body.status;
+
      const updatedDoc ={
       $set:{
         status : status
@@ -320,6 +380,8 @@ async function run() {
      const result = await ridersCollection.updateOne(query,updatedDoc)
       
     //  user role ar jonnno check
+
+
     if(status ==='approved'){
       const email = req.body.email
       const userQuery = {email}
