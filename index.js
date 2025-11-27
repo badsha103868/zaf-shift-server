@@ -104,7 +104,19 @@ async function run() {
     //  users related apis
    
     app.get('/users',verifyFBToken, async(req, res)=>{
-      const cursor = usersCollection.find()
+    //  query theka search value naoua
+    const searchText = req.query.searchText;
+    const query = {}
+    if(searchText){
+      // query.displayName = {$regex: searchText, $options: 'i'}
+        query.$or =[
+        {displayName: {$regex: searchText, $options: 'i'}},
+        {email: {$regex: searchText, $options: 'i'}},
+      ]
+    }
+
+
+      const cursor = usersCollection.find(query).sort({createdAt: -1}).limit(5)
       const result = await cursor.toArray()
       res.send(result)
     })
@@ -158,10 +170,15 @@ async function run() {
       // parcel?.email="badshagolder5@gmail.com"&
       const query = {};
 
-      const { email } = req.query;
+      const { email ,deliveryStatus } = req.query;
       //  check
       if (email) {
         query.senderEmail = email;
+      }
+
+      // delivery status check
+      if(deliveryStatus){
+        query.deliveryStatus = deliveryStatus;
       }
       //  sort ar jonnor options
       const options = { sort: { createdAt: -1 } };
@@ -188,6 +205,35 @@ async function run() {
       const result = await parcelsCollection.insertOne(parcel);
       res.send(result);
     });
+
+    // patch apis
+    app.patch('/parcels/:id', async(req,res)=>{
+      const { riderId, riderEmail, riderName} = req.body;
+      const id = req.params.id
+      const query = {_id: new ObjectId(id)}
+      const updatedDoc={
+        $set:{
+          deliveryStatus: 'driver_assigned',
+          riderId: riderId,
+          riderName: riderName,
+          riderEmail: riderEmail
+        }
+      }
+
+      const result = await parcelsCollection.updateOne(query, updatedDoc)
+
+      // update rider information 
+      const riderQuery = {_id: new ObjectId(riderId)}
+      const riderUpdatedDoc = {
+        $set:{
+          workStatus: "in_delivery"
+        }
+      }
+
+      const riderResult = await ridersCollection.updateOne(riderQuery, riderUpdatedDoc);
+
+      res.send(riderResult)
+    })
 
     // delete
     app.delete("/parcels/:id", async (req, res) => {
@@ -252,6 +298,7 @@ async function run() {
       if (paymentExist) {
         return res.send({
           transactionId,
+
           trackingId: paymentExist.trackingId,
 
           message: "Payment already processed",
@@ -271,6 +318,7 @@ async function run() {
         const update = {
           $set: {
             paymentStatus: "paid",
+            deliveryStatus: 'pending-pickup',
             trackingId: trackingId,
           },
         };
@@ -328,7 +376,7 @@ async function run() {
       return res.status(403).send({message: 'forbidden access'})
     }
 
-      const cursor = paymentCollection.find().sort({paidAt: -1});
+      const cursor = paymentCollection.find(query).sort({paidAt: -1});
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -337,10 +385,24 @@ async function run() {
 
   // rider get
   app.get('/riders', async(req, res)=>{
-    // only j gulo  pending oi data gulo pete 
+    // query parameter hishebe j data gulo disi
+    const {status, district, workStatus} = req.query ;
+
+
+    
     const query ={}
-     if(req.query.status){
-      query.status = req.query.status
+    // district onujayi data pete
+    if(district){
+      query.district = district
+    }
+    //work  status
+    if(workStatus){
+       query.workStatus = workStatus
+    }
+   
+// only j gulo  pending oi data gulo pete 
+     if(status){
+      query.status = status
      }
 
      
@@ -374,7 +436,8 @@ async function run() {
 
      const updatedDoc ={
       $set:{
-        status : status
+        status : status,
+        workStatus : 'available'
       }
      }
      const result = await ridersCollection.updateOne(query,updatedDoc)
