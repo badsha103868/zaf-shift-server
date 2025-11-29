@@ -105,7 +105,7 @@ async function run() {
        const log ={
         trackingId, 
         status,
-        details: status.split('-').join(' '),
+        details: status.split('_').join(' '),
         createdAt: new Date()
        }
 
@@ -234,8 +234,14 @@ async function run() {
     // post api
     app.post("/parcels", async (req, res) => {
       const parcel = req.body;
+      // tracking id generate bugs fix
+      const trackingId = generateTrackingId()
       // time created with post
       parcel.createdAt = new Date();
+      parcel.trackingId = trackingId;
+
+      // then log tracking call
+      logTracking(trackingId, 'parcel_created')
 
       const result = await parcelsCollection.insertOne(parcel);
       res.send(result);
@@ -416,7 +422,7 @@ async function run() {
         if (session.payment_status === "paid") {
           const resultPayment = await paymentCollection.insertOne(payment);
 
-          logTracking(trackingId, 'pending-pickup')
+          logTracking(trackingId, 'parcel_paid')
 
           res.send({
             success: true,
@@ -536,6 +542,15 @@ async function run() {
 
 
      res.send(result)
+    })
+
+    // tracking related apis
+
+    app.get('/trackings/:trackingId/logs', async(req, res)=>{
+           const trackingId = req.params.trackingId
+           const query = { trackingId }
+           const result = await trackingsCollection.find(query).toArray()
+           res.send(result)
     })
 
     // Send a ping to confirm a successful connection
