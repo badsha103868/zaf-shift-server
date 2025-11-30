@@ -85,97 +85,100 @@ async function run() {
     // middleware admin before allowing admin activity
     // must be used after verifyFBToken
 
-    const verifyAdmin = async(req,res,next)=>{
+    const verifyAdmin = async (req, res, next) => {
       // verifyFBToken theka decoded email theke email passi
       const email = req.decoded_email;
-      const query = { email }
+      const query = { email };
       // user paoua
-      const user = await usersCollection.findOne(query)
-       
+      const user = await usersCollection.findOne(query);
+
       //  admin na hoi tahole take forbidden access dakao
-      if(!user || user.role !== 'admin'){
-        return res.status(403).send({message: 'forbidden access'})
+      if (!user || user.role !== "admin") {
+        return res.status(403).send({ message: "forbidden access" });
       }
-   
-      next()
-    }
+
+      next();
+    };
 
     // tracking id logs function create
-    const logTracking = async (trackingId, status) =>{
-       const log ={
-        trackingId, 
+    const logTracking = async (trackingId, status) => {
+      const log = {
+        trackingId,
         status,
-        details: status.split('_').join(' '),
-        createdAt: new Date()
-       }
+        details: status.split("_").join(" "),
+        createdAt: new Date(),
+      };
 
-       const result = await trackingsCollection.insertOne(log)
-       return result;
-    }
-
-
+      const result = await trackingsCollection.insertOne(log);
+      return result;
+    };
 
     //  users related apis
-   
-    app.get('/users',verifyFBToken, async(req, res)=>{
-    //  query theka search value naoua
-    const searchText = req.query.searchText;
-    const query = {}
-    if(searchText){
-      // query.displayName = {$regex: searchText, $options: 'i'}
-        query.$or =[
-        {displayName: {$regex: searchText, $options: 'i'}},
-        {email: {$regex: searchText, $options: 'i'}},
-      ]
-    }
 
-
-      const cursor = usersCollection.find(query).sort({createdAt: -1}).limit(5)
-      const result = await cursor.toArray()
-      res.send(result)
-    })
-
-    // user ar role onujayi get
-    app.get('/users/:email/role', async(req, res)=>{
-      const email = req.params.email;
-      const query = { email }
-      const user = await usersCollection.findOne(query)
-      res.send({ role: user?.role || 'user'})
-    })
-
-
-     app.post('/users', async(req, res)=>{
-      const user = req.body;
-      // by default role hishabe rider k o akjon user hishabe rakbo 
-      user.role = 'user';
-      user.createdAt = new Date();
-       
-      const email = user.email;
-      const userExists = await usersCollection.findOne({ email })
-      
-      if(userExists){
-        return res.send({ message : 'user exists'})
+    app.get("/users", verifyFBToken, async (req, res) => {
+      //  query theka search value naoua
+      const searchText = req.query.searchText;
+      const query = {};
+      if (searchText) {
+        // query.displayName = {$regex: searchText, $options: 'i'}
+        query.$or = [
+          { displayName: { $regex: searchText, $options: "i" } },
+          { email: { $regex: searchText, $options: "i" } },
+        ];
       }
 
+      const cursor = usersCollection
+        .find(query)
+        .sort({ createdAt: -1 })
+        .limit(5);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
 
-      const result = await usersCollection.insertOne(user)
-      res.send(result)
-     })
+    // user ar role onujayi get
+    app.get("/users/:email/role", async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      res.send({ role: user?.role || "user" });
+    });
 
-     app.patch('/users/:id/role',verifyFBToken, verifyAdmin,async (req, res)=>{
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      // by default role hishabe rider k o akjon user hishabe rakbo
+      user.role = "user";
+      user.createdAt = new Date();
+
+      const email = user.email;
+      const userExists = await usersCollection.findOne({ email });
+
+      if (userExists) {
+        return res.send({ message: "user exists" });
+      }
+
+      const result = await usersCollection.insertOne(user);
+      res.send(result);
+    });
+
+    app.patch(
+      "/users/:id/role",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
         const id = req.params.id;
         // client a j role info disi oi ta received korbo
-        const roleInfo = req.body
-        const query = {_id : new ObjectId(id)}
-        const updateUser ={
-          $set:{
-            role: roleInfo.role
-          }
-        }
-        const result = await usersCollection.updateOne(query,updateUser)
+        const roleInfo = req.body;
+        const query = { _id: new ObjectId(id) };
+        const updateUser = {
+          $set: {
+            role: roleInfo.role,
+          },
+        };
+        const result = await usersCollection.updateOne(query, updateUser);
 
-        res.send(result)
-     } )
+        res.send(result);
+      }
+    );
 
     // parcel api
     app.get("/parcels", async (req, res) => {
@@ -184,14 +187,14 @@ async function run() {
       // parcel?.email="badshagolder5@gmail.com"&
       const query = {};
 
-      const { email ,deliveryStatus } = req.query;
+      const { email, deliveryStatus } = req.query;
       //  check
       if (email) {
         query.senderEmail = email;
       }
 
       // delivery status check
-      if(deliveryStatus){
+      if (deliveryStatus) {
         query.deliveryStatus = deliveryStatus;
       }
       //  sort ar jonnor options
@@ -203,25 +206,24 @@ async function run() {
     });
 
     // parcels ar modde rider ar api
-    app.get('/parcels/rider', async(req, res)=>{
+    app.get("/parcels/rider", async (req, res) => {
       const { riderEmail, deliveryStatus } = req.query;
 
-      const query = {}
+      const query = {};
 
-      if(riderEmail){
-        query.riderEmail =riderEmail
+      if (riderEmail) {
+        query.riderEmail = riderEmail;
       }
-      if(deliveryStatus !== 'parcel_delivered'){
+      if (deliveryStatus !== "parcel_delivered") {
         // query.deliveryStatus = {$in: ['driver_assigned', 'rider_arriving']}
-        query.deliveryStatus = {$nin: ['parcel_delivered']}
+        query.deliveryStatus = { $nin: ["parcel_delivered"] };
+      } else {
+        query.deliveryStatus = deliveryStatus;
       }
-        else{
-          query.deliveryStatus = deliveryStatus;
-        }
-      const cursor = parcelsCollection.find(query)
-      const result = await cursor.toArray()
-      res.send(result)
-    })
+      const cursor = parcelsCollection.find(query);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
 
     // paid status update ar jonno api create
     app.get("/parcels/:id", async (req, res) => {
@@ -235,13 +237,13 @@ async function run() {
     app.post("/parcels", async (req, res) => {
       const parcel = req.body;
       // tracking id generate bugs fix
-      const trackingId = generateTrackingId()
+      const trackingId = generateTrackingId();
       // time created with post
       parcel.createdAt = new Date();
       parcel.trackingId = trackingId;
 
       // then log tracking call
-      logTracking(trackingId, 'parcel_created')
+      logTracking(trackingId, "parcel_created");
 
       const result = await parcelsCollection.insertOne(parcel);
       res.send(result);
@@ -249,70 +251,73 @@ async function run() {
 
     // patch apis
     // TODO: rename this to be specific like /parcels/:id/assign
-    app.patch('/parcels/:id', async(req,res)=>{
-      const { riderId, riderEmail, riderName, trackingId} = req.body;
-      const id = req.params.id
-      const query = {_id: new ObjectId(id)}
-      const updatedDoc={
-        $set:{
-          deliveryStatus: 'driver_assigned',
+    app.patch("/parcels/:id", async (req, res) => {
+      const { riderId, riderEmail, riderName, trackingId } = req.body;
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          deliveryStatus: "driver_assigned",
           riderId: riderId,
           riderName: riderName,
-          riderEmail: riderEmail
-        }
-      }
+          riderEmail: riderEmail,
+        },
+      };
 
-      const result = await parcelsCollection.updateOne(query, updatedDoc)
+      const result = await parcelsCollection.updateOne(query, updatedDoc);
 
-      // update rider information 
-      const riderQuery = {_id: new ObjectId(riderId)}
+      // update rider information
+      const riderQuery = { _id: new ObjectId(riderId) };
       const riderUpdatedDoc = {
-        $set:{
-          workStatus: "in_delivery"
-        }
-      }
+        $set: {
+          workStatus: "in_delivery",
+        },
+      };
 
-      const riderResult = await ridersCollection.updateOne(riderQuery, riderUpdatedDoc);
+      const riderResult = await ridersCollection.updateOne(
+        riderQuery,
+        riderUpdatedDoc
+      );
 
       // tracking id call
-      logTracking(trackingId,'driver_assigned' )
+      logTracking(trackingId, "driver_assigned");
 
-      res.send(riderResult)
-    })
-    
+      res.send(riderResult);
+    });
+
     // status ar jonno patch
-    
-  app.patch('/parcels/:id/status', async(req,res)=>{
-    const { deliveryStatus, riderId , trackingId} = req.body;
-    const id = req.params.id
-    const query = {_id: new ObjectId(id)}
-    const updatedDoc={
-      $set:{
-        deliveryStatus: deliveryStatus
+
+    app.patch("/parcels/:id/status", async (req, res) => {
+      const { deliveryStatus, riderId, trackingId } = req.body;
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          deliveryStatus: deliveryStatus,
+        },
+      };
+
+      if (deliveryStatus === "parcel_delivered") {
+        // update rider information
+        const riderQuery = { _id: new ObjectId(riderId) };
+        const riderUpdatedDoc = {
+          $set: {
+            workStatus: "available",
+          },
+        };
+
+        const riderResult = await ridersCollection.updateOne(
+          riderQuery,
+          riderUpdatedDoc
+        );
       }
-    }
+      const result = await parcelsCollection.updateOne(query, updatedDoc);
 
-    if(deliveryStatus === 'parcel_delivered'){
-     // update rider information 
-      const riderQuery = {_id: new ObjectId(riderId)}
-      const riderUpdatedDoc = {
-        $set:{
-          workStatus: "available"
-        }
-      }
+      // log tracking
+      logTracking(trackingId, deliveryStatus);
 
-      const riderResult = await ridersCollection.updateOne(riderQuery, riderUpdatedDoc);
-
-     
-
-    }
-    const result = await parcelsCollection.updateOne(query, updatedDoc)
-
-  // log tracking
-  logTracking(trackingId, deliveryStatus)
-
-    res.send(result)
-  })
+      res.send(result);
+    });
 
     // delete
     app.delete("/parcels/:id", async (req, res) => {
@@ -324,18 +329,15 @@ async function run() {
       res.send(result);
     });
 
-    // stripe payment apis
-    app.post("/create-checkout-session", async (req, res) => {
-      // client theka data info naoua
+    // payment related apis
+    app.post("/payment-checkout-session", async (req, res) => {
       const paymentInfo = req.body;
-      // amount set
       const amount = parseInt(paymentInfo.cost) * 100;
-
       const session = await stripe.checkout.sessions.create({
         line_items: [
           {
             price_data: {
-              currency: "USD",
+              currency: "usd",
               unit_amount: amount,
               product_data: {
                 name: `Please pay for: ${paymentInfo.parcelName}`,
@@ -344,18 +346,51 @@ async function run() {
             quantity: 1,
           },
         ],
-        customer_email: paymentInfo.senderEmail,
         mode: "payment",
         metadata: {
           parcelId: paymentInfo.parcelId,
-          parcelName: paymentInfo.parcelName,
+          trackingId: paymentInfo.trackingId,
         },
+        customer_email: paymentInfo.senderEmail,
         success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
       });
-      console.log(session);
+
       res.send({ url: session.url });
     });
+
+    // // stripe payment apis
+    // app.post("/create-checkout-session", async (req, res) => {
+    //   // client theka data info naoua
+    //   const paymentInfo = req.body;
+    //   // amount set
+    //   const amount = parseInt(paymentInfo.cost) * 100;
+
+    //   const session = await stripe.checkout.sessions.create({
+    //     line_items: [
+    //       {
+    //         price_data: {
+    //           currency: "USD",
+    //           unit_amount: amount,
+    //           product_data: {
+    //             name: `Please pay for: ${paymentInfo.parcelName}`,
+    //           },
+    //         },
+    //         quantity: 1,
+    //       },
+    //     ],
+    //     customer_email: paymentInfo.senderEmail,
+    //     mode: "payment",
+    //     metadata: {
+    //       parcelId: paymentInfo.parcelId,
+    //       parcelName: paymentInfo.parcelName,
+    //     },
+    //     success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+    //     cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
+    //   });
+    //   console.log(session);
+    //   res.send({ url: session.url });
+    // });
 
     //  payment status update api
     app.patch("/payment-success", async (req, res) => {
@@ -383,9 +418,12 @@ async function run() {
           message: "Payment already processed",
         });
       }
-
-      // tracking id  call
-      const trackingId = generateTrackingId();
+         
+      // use the previous  tracking id created during the parcel create which was set to the session metadata during session creation 
+      
+      // // tracking id  call
+      // const trackingId = generateTrackingId();
+      const trackingId = session.metadata.trackingId;
 
       //  jodi  payment status paid hoi
       if (session.payment_status === "paid") {
@@ -397,8 +435,11 @@ async function run() {
         const update = {
           $set: {
             paymentStatus: "paid",
-            deliveryStatus: 'pending-pickup',
-            trackingId: trackingId,
+            deliveryStatus: "pending-pickup",
+
+            // jhetu parcel ar modde already asa tahola ar notun kora korar dorkar nai bug fixxing ar jonno
+
+            // trackingId: trackingId,
           },
         };
 
@@ -422,7 +463,7 @@ async function run() {
         if (session.payment_status === "paid") {
           const resultPayment = await paymentCollection.insertOne(payment);
 
-          logTracking(trackingId, 'parcel_paid')
+          logTracking(trackingId, "parcel_paid");
 
           res.send({
             success: true,
@@ -451,107 +492,103 @@ async function run() {
       if (email) {
         query.customerEmail = email;
       }
-           
-    // check email address with decoded email
-    if(email !==req.decoded_email){
-      return res.status(403).send({message: 'forbidden access'})
-    }
 
-      const cursor = paymentCollection.find(query).sort({paidAt: -1});
+      // check email address with decoded email
+      if (email !== req.decoded_email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+
+      const cursor = paymentCollection.find(query).sort({ paidAt: -1 });
       const result = await cursor.toArray();
       res.send(result);
     });
-     
+
     //  riders related api
 
-  // rider get
-  app.get('/riders', async(req, res)=>{
-    // query parameter hishebe j data gulo disi
-    const {status, district, workStatus} = req.query ;
+    // rider get
+    app.get("/riders", async (req, res) => {
+      // query parameter hishebe j data gulo disi
+      const { status, district, workStatus } = req.query;
 
+      const query = {};
+      // district onujayi data pete
+      if (district) {
+        query.district = district;
+      }
+      //work  status
+      if (workStatus) {
+        query.workStatus = workStatus;
+      }
 
-    
-    const query ={}
-    // district onujayi data pete
-    if(district){
-      query.district = district
-    }
-    //work  status
-    if(workStatus){
-       query.workStatus = workStatus
-    }
-   
-// only j gulo  pending oi data gulo pete 
-     if(status){
-      query.status = status
-     }
+      // only j gulo  pending oi data gulo pete
+      if (status) {
+        query.status = status;
+      }
 
-     
-      const cursor = ridersCollection.find(query)
-      const result= await cursor.toArray()
-      res.send((result))
-  })
+      const cursor = ridersCollection.find(query);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
 
-  // rider post
-    app.post('/riders', async (req, res)=>{
+    // rider post
+    app.post("/riders", async (req, res) => {
       const rider = req.body;
-      
 
-      rider.createdAt = new Date()
+      rider.createdAt = new Date();
 
-      rider.status= "pending"
+      rider.status = "pending";
 
-      const result = await ridersCollection.insertOne(rider)
+      const result = await ridersCollection.insertOne(rider);
 
-      res.send(result)
-    })
+      res.send(result);
+    });
 
     //  rider patch
 
-    app.patch('/riders/:id', verifyFBToken,verifyAdmin, async(req, res)=>{
-      const id = req.params.id
+    app.patch("/riders/:id", verifyFBToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
 
-      const query = {_id : new ObjectId(id)}
+      const query = { _id: new ObjectId(id) };
 
-     const status = req.body.status;
+      const status = req.body.status;
 
-     const updatedDoc ={
-      $set:{
-        status : status,
-        workStatus : 'available'
-      }
-     }
-     const result = await ridersCollection.updateOne(query,updatedDoc)
-      
-    //  user role ar jonnno check
-
-
-    if(status ==='approved'){
-      const email = req.body.email
-      const userQuery = {email}
-      // email pauor por update korbo
-      const updateUser = {
+      const updatedDoc = {
         $set: {
-          role: 'rider'
-        }
+          status: status,
+          workStatus: "available",
+        },
+      };
+      const result = await ridersCollection.updateOne(query, updatedDoc);
+
+      //  user role ar jonnno check
+
+      if (status === "approved") {
+        const email = req.body.email;
+        const userQuery = { email };
+        // email pauor por update korbo
+        const updateUser = {
+          $set: {
+            role: "rider",
+          },
+        };
+
+        const userResult = await usersCollection.updateOne(
+          userQuery,
+          updateUser
+        );
       }
 
-      const userResult = await usersCollection.updateOne(userQuery, updateUser)
-    }
-
-
-
-     res.send(result)
-    })
+      res.send(result);
+    });
 
     // tracking related apis
 
-    app.get('/trackings/:trackingId/logs', async(req, res)=>{
-           const trackingId = req.params.trackingId
-           const query = { trackingId }
-           const result = await trackingsCollection.find(query).toArray()
-           res.send(result)
-    })
+    app.get("/trackings/:trackingId/logs", async (req, res) => {
+      const trackingId = req.params.trackingId;
+      const query = { trackingId };
+      const result = await trackingsCollection.find(query).toArray();
+      res.send(result);
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
