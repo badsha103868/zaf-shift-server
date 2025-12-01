@@ -100,8 +100,37 @@ async function run() {
       next();
     };
 
+    // middleware rider before allowing admin activity
+    // must be used after verifyFBToken
+
+    const verifyRider = async (req, res, next) => {
+      // verifyFBToken theka decoded email theke email passi
+      const email = req.decoded_email;
+      const query = { email };
+      // user paoua
+      const user = await usersCollection.findOne(query);
+
+      //  admin na hoi tahole take forbidden access dakao
+      if (!user || user.role !== "rider") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+
+      next();
+    };
+
     // tracking id logs function create
     const logTracking = async (trackingId, status) => {
+      // prevent duplicate logs
+      const existing = await trackingsCollection.findOne({
+        trackingId,
+        status,
+      });
+
+      if (existing) {
+        console.log("Duplicate log prevented:", trackingId, status);
+        return { message: "duplicate_prevented" };
+      }
+
       const log = {
         trackingId,
         status,
@@ -230,6 +259,28 @@ async function run() {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await parcelsCollection.findOne(query);
+      res.send(result);
+    });
+
+    // pipeline api
+    app.get("/parcels/delivery-status/stats", async (req, res) => {
+      const pipeline = [
+        {
+          $group: {
+            _id: "$deliveryStatus",
+            count: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            status: "$_id",
+            count: 1,
+            // _id: 0
+          },
+        },
+      ];
+
+      const result = await parcelsCollection.aggregate(pipeline).toArray();
       res.send(result);
     });
 
@@ -407,7 +458,7 @@ async function run() {
       const query = { transactionId: transactionId };
 
       const paymentExist = await paymentCollection.findOne(query);
-      console.log(paymentExist);
+      // console.log(paymentExist);
 
       if (paymentExist) {
         return res.send({
@@ -418,9 +469,9 @@ async function run() {
           message: "Payment already processed",
         });
       }
-         
-      // use the previous  tracking id created during the parcel create which was set to the session metadata during session creation 
-      
+
+      // use the previous  tracking id created during the parcel create which was set to the session metadata during session creation
+
       // // tracking id  call
       // const trackingId = generateTrackingId();
       const trackingId = session.metadata.trackingId;
@@ -460,23 +511,21 @@ async function run() {
           trackingId: trackingId,
         };
 
-        if (session.payment_status === "paid") {
-          const resultPayment = await paymentCollection.insertOne(payment);
+        const resultPayment = await paymentCollection.insertOne(payment);
 
-          logTracking(trackingId, "parcel_paid");
+        logTracking(trackingId, "parcel_paid");
 
-          res.send({
-            success: true,
-            message: "Payment processed successfully",
-            modifyParcel: result,
-            trackingId: trackingId,
-            transactionId: session.payment_intent,
-            paymentInfo: resultPayment,
-          });
-        }
+        return res.send({
+          success: true,
+          message: "Payment processed successfully",
+          modifyParcel: result,
+          trackingId: trackingId,
+          transactionId: session.payment_intent,
+          paymentInfo: resultPayment,
+        });
       }
 
-      res.send({ success: false });
+      return res.send({ success: false });
     });
 
     // payment related apis
@@ -530,6 +579,56 @@ async function run() {
       res.send(result);
     });
 
+    //  ride pipeline data get
+    app.get("/riders/delivery-per-day", async (req, res) => {
+      const email = req.query.email;
+
+      // aggregate on parcel
+      const pipeline = [
+        {
+          $match: {
+            riderEmail: email,
+            deliveryStatus: "parcel_delivered",
+          },
+        },
+        {
+          $lookup: {
+            from: "trackings",
+            localField: "trackingId",
+            foreignField: "trackingId",
+            as: "parcel_trackings",
+          },
+        },
+        {
+          $unwind: "$parcel_trackings",
+        },
+        {
+          $match: {
+            "parcel_trackings.status": "parcel_delivered",
+          },
+        },
+        {
+          // convert timestamp to YYYY-MM-DD string
+          $addFields: {
+            deliveryDay: {
+              $dateToString: {
+                format: "%Y-%m-%d",
+                date: "$parcel_trackings.createdAt",
+              },
+            },
+          },
+        },
+        {
+          // group by date
+          $group: {
+            _id: "$deliveryDay",
+            deliveredCount: { $sum: 1 },
+          },
+        },
+      ];
+      const result = await parcelsCollection.aggregate(pipeline).toArray();
+      res.send(result);
+    });
     // rider post
     app.post("/riders", async (req, res) => {
       const rider = req.body;
@@ -591,10 +690,7 @@ async function run() {
     });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+   
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
